@@ -107,14 +107,23 @@ def _sql_unescape(s: str) -> str:
 def split_statements(sql_text: str) -> list[StatementInfo]:
     """
     Split raw SQL text on top-level semicolons (ignoring semicolons
-    inside quoted strings) and return StatementInfo objects.
+    inside single-quoted strings or backtick identifiers) and return
+    StatementInfo objects.
+
+    Double-quoted regions are intentionally NOT tracked here. MySQL uses
+    `'` for string literals and `"` for identifiers (under ANSI_QUOTES);
+    `;` essentially never appears inside an identifier. Tracking `"`
+    here breaks splitting on CSV-exported files where each statement is
+    wrapped in `"…"` — the closing/opening `"` between blocks would
+    leave the parser inside a "string" across the `;` boundary, gluing
+    statements together. `check_csv_wrapped_statements` and
+    `check_unmatched_quotes` still flag `"`-related issues independently.
     """
     statements: list[StatementInfo] = []
     current_start = 0
     i = 0
     in_single = False
     in_backtick = False
-    in_double = False
     length = len(sql_text)
 
     while i < length:
@@ -133,12 +142,6 @@ def split_statements(sql_text: str) -> list[StatementInfo]:
             i += 1
             continue
 
-        if in_double:
-            if ch == '"':
-                in_double = False
-            i += 1
-            continue
-
         if in_backtick:
             if ch == '`':
                 in_backtick = False
@@ -147,8 +150,6 @@ def split_statements(sql_text: str) -> list[StatementInfo]:
 
         if ch == "'":
             in_single = True
-        elif ch == '"':
-            in_double = True
         elif ch == '`':
             in_backtick = True
         elif ch == '-' and i + 1 < length and sql_text[i + 1] == '-':
@@ -617,6 +618,141 @@ def check_common_typos(sql_text: str) -> list[Issue]:
     return issues
 
 
+def check_unescaped_apostrophes(sql_text: str) -> list[Issue]:
+    """
+    Detect apostrophes inside string literals that are not escaped.
+
+    In MySQL, an apostrophe inside a single-quoted string must be either
+    doubled ('') or backslash-escaped (\\').  An apostrophe sitting between
+    two letters (e.g. ``o'clock``, ``Year's``, ``D'Oyly``) prematurely
+    terminates the string and the rest is parsed as raw SQL — producing
+    cryptic errors at execution time.
+
+    This check works on the raw text rather than the statement splitter
+    output, because the splitter itself is thrown off by exactly this bug.
+    The pattern ``[A-Za-z]'[A-Za-z]`` is unambiguous: in legitimate SQL a
+    single-quote is always preceded or followed by a non-letter
+    (whitespace, ``=``, ``,``, ``)``, ``;``, digit, or another ``'``).
+    """
+    issues: list[Issue] = []
+    # Strip comments first so apostrophes in -- / # / /* */ comments aren't flagged.
+    pattern = re.compile(r"[A-Za-z]'[A-Za-z]")
+    for m in pattern.finditer(sql_text):
+        pos = m.start() + 1  # point at the apostrophe itself
+        # Skip if this position falls inside a SQL line/block comment
+        if _pos_inside_comment(sql_text, pos):
+            continue
+        ln, col = _line_col_at(sql_text, pos)
+        issues.append(Issue(
+            severity=Severity.ERROR,
+            line_number=ln,
+            column=col,
+            phrase=_snippet(sql_text, pos, 60),
+            message="Unescaped apostrophe (') inside a string literal — will fail to execute.",
+            suggestion="Double the apostrophe ('') or backslash-escape it (\\') so the string isn't terminated mid-word.",
+        ))
+    return issues
+
+
+def check_csv_wrapped_statements(sql_text: str) -> list[Issue]:
+    """
+    Detect SQL statements wrapped in outer double-quotes — a common
+    artefact of pasting from a CSV / Excel export.  The pattern looks like::
+
+        "UPDATE `t` SET `c` = '...' WHERE id = 1;"
+
+    The leading and trailing ``"`` make the whole thing not a valid SQL
+    statement.
+    """
+    issues: list[Issue] = []
+    pattern = re.compile(
+        r'^\s*"\s*(UPDATE|INSERT|DELETE|SELECT|REPLACE|CREATE|ALTER|DROP|MERGE|TRUNCATE)\b',
+        re.IGNORECASE | re.MULTILINE,
+    )
+    for m in pattern.finditer(sql_text):
+        pos = m.start()
+        ln, col = _line_col_at(sql_text, pos)
+        issues.append(Issue(
+            severity=Severity.ERROR,
+            line_number=ln,
+            column=col,
+            phrase=_snippet(sql_text, m.start(1), 60),
+            message='Statement is wrapped in outer double-quotes ("…") — not valid SQL.',
+            suggestion='Remove the surrounding " characters; this usually comes from a CSV/Excel export.',
+        ))
+    return issues
+
+
+def check_doubled_double_quotes(sql_text: str) -> list[Issue]:
+    """
+    Detect ``""`` (two double-quotes in a row).  Inside CSV-exported text
+    this is the escape for an embedded ``"``, but in raw SQL the inner
+    string content is normally unquoted or single-quoted, so ``""`` almost
+    always means the file came from a CSV export and the data has been
+    corrupted.
+
+    Reported once per line to avoid drowning the user in matches when a
+    single statement contains many of them.
+    """
+    issues: list[Issue] = []
+    seen_lines: set[int] = set()
+    for m in re.finditer(r'""', sql_text):
+        pos = m.start()
+        ln, col = _line_col_at(sql_text, pos)
+        if ln in seen_lines:
+            continue
+        seen_lines.add(ln)
+        issues.append(Issue(
+            severity=Severity.WARNING,
+            line_number=ln,
+            column=col,
+            phrase=_snippet(sql_text, pos, 60),
+            message='Found "" (doubled double-quote) — likely a CSV-escaped " that should be a single ".',
+            suggestion='Replace "" with " — this usually means the SQL was pasted from a CSV/Excel export.',
+        ))
+    return issues
+
+
+def check_invalid_html_br(sql_text: str) -> list[Issue]:
+    """
+    Flag the invalid ``</br>`` HTML tag.  ``<br>`` is a void element and
+    has no closing form; the correct alternatives are ``<br>`` or
+    ``<br/>``.  Storing ``</br>`` in content is a data-quality issue
+    even though the SQL itself parses fine.
+    """
+    issues: list[Issue] = []
+    seen_lines: set[int] = set()
+    for m in re.finditer(r'</br\s*>', sql_text, re.IGNORECASE):
+        pos = m.start()
+        ln, col = _line_col_at(sql_text, pos)
+        if ln in seen_lines:
+            continue
+        seen_lines.add(ln)
+        issues.append(Issue(
+            severity=Severity.WARNING,
+            line_number=ln,
+            column=col,
+            phrase=_snippet(sql_text, pos, 40),
+            message="Invalid </br> HTML tag — <br> is a void element with no closing form.",
+            suggestion="Replace </br> with <br> or <br/>.",
+        ))
+    return issues
+
+
+def _pos_inside_comment(sql_text: str, pos: int) -> bool:
+    """Cheap check: is *pos* inside a -- / # line comment or /* */ block comment?"""
+    # Find the start of the line containing pos
+    line_start = sql_text.rfind("\n", 0, pos) + 1
+    line_prefix = sql_text[line_start:pos]
+    # Line comments
+    if "--" in line_prefix or "#" in line_prefix:
+        return True
+    # Block comment: count /* and */ before pos
+    opens = sql_text.count("/*", 0, pos)
+    closes = sql_text.count("*/", 0, pos)
+    return opens > closes
+
+
 def check_duplicate_keywords(stmt: StatementInfo) -> list[Issue]:
     """Warn if certain keywords appear more than once at the top level."""
     issues: list[Issue] = []
@@ -629,6 +765,7 @@ def check_duplicate_keywords(stmt: StatementInfo) -> list[Issue]:
             pos = m.start()
             before = text[:pos]
             sq = 0
+            depth = 0
             j = 0
             while j < len(before):
                 if before[j] == '\\':
@@ -636,8 +773,13 @@ def check_duplicate_keywords(stmt: StatementInfo) -> list[Issue]:
                     continue
                 if before[j] == "'":
                     sq += 1
+                elif sq % 2 == 0:
+                    if before[j] == '(':
+                        depth += 1
+                    elif before[j] == ')':
+                        depth -= 1
                 j += 1
-            if sq % 2 == 0:
+            if sq % 2 == 0 and depth == 0:
                 positions.append(pos)
         if len(positions) > 1:
             for p in positions[1:]:
@@ -791,6 +933,10 @@ def check_sql_file(file_path: str) -> Report:
     report.issues.extend(check_unmatched_quotes(sql_text, file_lines))
     report.issues.extend(check_unmatched_brackets(sql_text))
     report.issues.extend(check_common_typos(sql_text))
+    report.issues.extend(check_unescaped_apostrophes(sql_text))
+    report.issues.extend(check_csv_wrapped_statements(sql_text))
+    report.issues.extend(check_doubled_double_quotes(sql_text))
+    report.issues.extend(check_invalid_html_br(sql_text))
 
     # 3. Per-statement checks
     for stmt in statements:
