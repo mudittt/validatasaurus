@@ -8,24 +8,19 @@ import (
 )
 
 const dinoArt = `
-                       ##      .##                                     
-                +#   -#############                                    
-               +#####################                                  
-              #########################                                
-            #############################                              
-          ######################################=                      
-          ########################################                     
-           ################################  ######:                   
-            ########################################                   
-            ########################################                   
-            ########################################=                  
-           ########################################                    
-          ###################################                          
-          ##################################-                          
-         ###################################                           
-  ####  #############       ################                           
- ########## ########         ########:######                           
-#########=   #######         ######-   ####                            
+               .==   ===                          
+           ==============                         
+         ==================:                      
+       ==========================                 
+      .============================               
+        ====================== =====              
+        ============================              
+        =============================             
+       ============================               
+      =========================                   
+      =========    ============                   
+ =============      ==========                    
+======   ====       =====  ===                    
 `
 
 func (m Model) View() string {
@@ -38,6 +33,8 @@ func (m Model) View() string {
 		return m.viewProgress()
 	case StateResults:
 		return m.viewResults()
+	case StatePostPrompt:
+		return m.viewPostPrompt()
 	case StateDone:
 		return m.viewDone()
 	case StateError:
@@ -129,8 +126,25 @@ func (m Model) viewResults() string {
 		b.WriteString(renderResultsDetail(m.results))
 		b.WriteString("\n")
 	}
-	b.WriteString(labelStyle.Render("Post this report as a comment? "))
+	b.WriteString(labelStyle.Render("Walk through and post a comment per file? "))
 	b.WriteString(helpStyle.Render("[y] yes  [n] no  [d] " + detailToggleLabel(m.detailed) + "  [q] quit"))
+	b.WriteString("\n")
+	return b.String()
+}
+
+func (m Model) viewPostPrompt() string {
+	var b strings.Builder
+	b.WriteString(m.header())
+	b.WriteString("  ")
+	b.WriteString(subtitleStyle.Render(fmt.Sprintf("›  File %d of %d", m.postIdx+1, len(m.results))))
+	b.WriteString("\n\n")
+	r := m.results[m.postIdx]
+	b.WriteString(renderResultsTable([]validator.Result{r}))
+	b.WriteString("\n")
+	b.WriteString(renderResultsDetail([]validator.Result{r}))
+	b.WriteString("\n")
+	b.WriteString(labelStyle.Render(fmt.Sprintf("Post comment for %s? ", r.FileName)))
+	b.WriteString(helpStyle.Render("[y] yes  [n] skip  [q] quit"))
 	b.WriteString("\n")
 	return b.String()
 }
@@ -141,10 +155,13 @@ func (m Model) viewDone() string {
 	b.WriteString("\n\n")
 	b.WriteString(successStyle.Render("✅ Done"))
 	b.WriteString("\n\n")
-	if m.posted {
-		b.WriteString(successStyle.Render("Comment posted to " + m.platform.Name() + "."))
-	} else {
-		b.WriteString(mutedStyle.Render("Comment was not posted."))
+	switch {
+	case m.postedCount == 0:
+		b.WriteString(mutedStyle.Render("No comments posted."))
+	case m.postedCount == len(m.results):
+		b.WriteString(successStyle.Render(fmt.Sprintf("Posted %d comment(s) to %s.", m.postedCount, m.platform.Name())))
+	default:
+		b.WriteString(successStyle.Render(fmt.Sprintf("Posted %d of %d comment(s) to %s.", m.postedCount, len(m.results), m.platform.Name())))
 	}
 	b.WriteString("\n\n")
 	b.WriteString(renderResultsTable(m.results))

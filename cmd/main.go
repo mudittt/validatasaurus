@@ -125,8 +125,13 @@ func runDryRun(cfg *config.Config, ticketURL string, detailed bool) {
 	results := validator.ValidateAll(cfg.PythonPath, files)
 	printResults(results, detailed)
 
-	fmt.Printf("\n--- Comment body (%s) ---\n", client.Name())
-	fmt.Println(validator.FormatComment(client.Name(), results))
+	fmt.Printf("\n--- Per-file comment bodies (%s) ---\n", client.Name())
+	for i, r := range results {
+		if i > 0 {
+			fmt.Println("\n────────────────────────────────────────")
+		}
+		fmt.Println(validator.FormatFileComment(client.Name(), r))
+	}
 }
 
 func printResults(results []validator.Result, detailed bool) {

@@ -86,8 +86,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case msgCommentPosted:
+		m.postedCount++
 		m.posted = true
-		m.state = StateDone
+		m.appendLog("✅ Posted comment for " + m.results[m.postIdx].FileName)
+		m.postIdx++
+		if m.postIdx >= len(m.results) {
+			m.state = StateDone
+			return m, nil
+		}
+		m.state = StatePostPrompt
 		return m, nil
 	}
 
@@ -159,16 +166,38 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case StateResults:
 		switch strings.ToLower(msg.String()) {
 		case "y":
-			body := validator.FormatComment(m.platform.Name(), m.results)
-			m.commentBody = body
-			m.state = StatePosting
-			m.setStatus("Posting report to " + m.platform.Name() + "…")
-			return m, postCommentCmd(m.platform, m.ticketURL, body)
+			if len(m.results) == 0 {
+				m.state = StateDone
+				return m, nil
+			}
+			m.postIdx = 0
+			m.state = StatePostPrompt
+			return m, nil
 		case "n":
 			m.state = StateDone
 			return m, nil
 		case "d":
 			m.detailed = !m.detailed
+			return m, nil
+		case "q":
+			return m, tea.Quit
+		}
+		return m, nil
+
+	case StatePostPrompt:
+		switch strings.ToLower(msg.String()) {
+		case "y":
+			body := validator.FormatFileComment(m.platform.Name(), m.results[m.postIdx])
+			m.state = StatePosting
+			m.setStatus("Posting comment for " + m.results[m.postIdx].FileName + "…")
+			return m, postCommentCmd(m.platform, m.ticketURL, body)
+		case "n":
+			m.appendLog("⏭  Skipped " + m.results[m.postIdx].FileName)
+			m.postIdx++
+			if m.postIdx >= len(m.results) {
+				m.state = StateDone
+				return m, nil
+			}
 			return m, nil
 		case "q":
 			return m, tea.Quit

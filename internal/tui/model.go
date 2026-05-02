@@ -20,6 +20,7 @@ const (
 	StateAuthInput
 	StateValidating
 	StateResults
+	StatePostPrompt
 	StatePosting
 	StateDone
 	StateError
@@ -50,7 +51,8 @@ type Model struct {
 	files       []platform.SQLFile
 	fileIdx     int
 	results     []validator.Result
-	commentBody string
+	postIdx     int
+	postedCount int
 	posted      bool
 	detailed    bool
 }

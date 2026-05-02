@@ -200,46 +200,32 @@ func statusEmoji(r Result) string {
 	}
 }
 
-func FormatComment(platformName string, results []Result) string {
+func FormatFileComment(platformName string, r Result) string {
 	if strings.EqualFold(platformName, "jira") {
-		return formatJira(results)
+		return formatJiraFile(r)
 	}
-	return formatGitHub(results)
+	return formatGitHubFile(r)
 }
 
-func formatGitHub(results []Result) string {
+func formatGitHubFile(r Result) string {
 	var b strings.Builder
-	b.WriteString("## 🦕 Validatasaurus — SQL Validation Report\n\n")
-	b.WriteString("| File | Status | Statements | Errors | Warnings |\n")
-	b.WriteString("|------|--------|-----------:|-------:|---------:|\n")
-	for _, r := range results {
-		fmt.Fprintf(&b, "| `%s` | %s %s | %d | %d | %d |\n",
-			r.FileName, statusEmoji(r), r.Status, r.Statements, r.ErrorCount, r.WarnCount)
-	}
-	b.WriteString("\n")
-	for _, r := range results {
-		fmt.Fprintf(&b, "<details><summary>📄 %s</summary>\n\n", r.FileName)
-		b.WriteString("```\n")
-		b.WriteString(detailBody(r))
-		b.WriteString("\n```\n\n</details>\n\n")
-	}
+	fmt.Fprintf(&b, "## 🦕 Validatasaurus — `%s`\n\n", r.FileName)
+	fmt.Fprintf(&b, "%s **%s** · %d statement(s) · %d error(s) · %d warning(s)\n\n",
+		statusEmoji(r), r.Status, r.Statements, r.ErrorCount, r.WarnCount)
+	b.WriteString("```\n")
+	b.WriteString(detailBody(r))
+	b.WriteString("\n```\n")
 	return b.String()
 }
 
-func formatJira(results []Result) string {
+func formatJiraFile(r Result) string {
 	var b strings.Builder
-	b.WriteString("h2. 🦕 Validatasaurus — SQL Validation Report\n\n")
-	b.WriteString("|| File || Status || Statements || Errors || Warnings ||\n")
-	for _, r := range results {
-		fmt.Fprintf(&b, "| %s | %s %s | %d | %d | %d |\n",
-			r.FileName, statusEmoji(r), r.Status, r.Statements, r.ErrorCount, r.WarnCount)
-	}
-	b.WriteString("\n")
-	for _, r := range results {
-		fmt.Fprintf(&b, "{panel:title=%s}\n{noformat}\n", r.FileName)
-		b.WriteString(detailBody(r))
-		b.WriteString("\n{noformat}\n{panel}\n\n")
-	}
+	fmt.Fprintf(&b, "h2. 🦕 Validatasaurus — %s\n\n", r.FileName)
+	fmt.Fprintf(&b, "%s *%s* — %d statement(s), %d error(s), %d warning(s)\n\n",
+		statusEmoji(r), r.Status, r.Statements, r.ErrorCount, r.WarnCount)
+	b.WriteString("{noformat}\n")
+	b.WriteString(detailBody(r))
+	b.WriteString("\n{noformat}\n")
 	return b.String()
 }
 
