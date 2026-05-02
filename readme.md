@@ -2,7 +2,7 @@
 <img display="inline-block" src="validatasaurus_logo.svg" alt="Validatasaurus Logo" width="200" />
 </div>
 
-# validatasaurus
+# Validatasaurus
 
 
 

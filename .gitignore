@@ -1,0 +1,6 @@
+validatasaurus
+.env
+.DS_Store
+*.test
+*.out
+todo.md
