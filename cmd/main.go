@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	wordwrap "github.com/mitchellh/go-wordwrap"
 
 	"github.com/mudittt/validatasaurus/internal/config"
 	"github.com/mudittt/validatasaurus/internal/detect"
@@ -21,8 +20,9 @@ const (
 	severityW = 8
 	lineW     = 4
 	colW      = 4
-	msgW      = 42
-	fixW      = 42
+	phraseW   = 15
+	msgW      = 32
+	fixW      = 32
 )
 
 func main() {
@@ -140,9 +140,25 @@ func runDryRun(cfg *config.Config, ticketURL string, detailed bool) {
 	fmt.Println(validator.FormatComment(client.Name(), results))
 }
 
-func wrapText(s string, width uint) []string {
-	wrapped := wordwrap.WrapString(s, width)
-	return strings.Split(wrapped, "\n")
+func wrapText(s string, width int) []string {
+	if width <= 0 {
+		return []string{s}
+	}
+	s = strings.ReplaceAll(s, "↵", "\n")
+	var out []string
+	for _, rawLine := range strings.Split(s, "\n") {
+		line := rawLine
+		for len(line) > width {
+			splitAt := width
+			if idx := strings.LastIndex(line[:width], " "); idx > 0 {
+				splitAt = idx
+			}
+			out = append(out, strings.TrimSpace(line[:splitAt]))
+			line = strings.TrimSpace(line[splitAt:])
+		}
+		out = append(out, line)
+	}
+	return out
 }
 
 func printResults(results []validator.Result, detailed bool) {
@@ -154,20 +170,22 @@ func printResults(results []validator.Result, detailed bool) {
 
 		if detailed && len(r.Issues) > 0 {
 			fmt.Println()
-			fmt.Printf("  %-*s   %-*s   %-*s   %-*s   %-*s   %-*s\n",
+			fmt.Printf("  %-*s   %-*s   %-*s   %-*s   %-*s   %-*s   %-*s\n",
 				numW, "#",
 				severityW, "Severity",
 				lineW, "Line",
 				colW, "Col",
+				phraseW, "Phrase",
 				msgW, "Message",
 				fixW, "Fix",
 			)
 
-			fmt.Printf("  %-*s   %-*s   %-*s   %-*s   %-*s   %-*s\n",
+			fmt.Printf("  %-*s   %-*s   %-*s   %-*s   %-*s   %-*s   %-*s\n",
 				numW, "--",
 				severityW, "--------",
 				lineW, "----",
 				colW, "----",
+				phraseW, strings.Repeat("-", phraseW),
 				msgW, strings.Repeat("-", msgW),
 				fixW, strings.Repeat("-", fixW),
 			)
@@ -178,18 +196,26 @@ func printResults(results []validator.Result, detailed bool) {
 					col = fmt.Sprintf("%d", iss.Column)
 				}
 
+				phraseLines := wrapText(iss.Phrase, phraseW)
 				msgLines := wrapText(iss.Message, msgW)
 				fixLines := wrapText(iss.Suggestion, fixW)
 
-				maxLines := len(msgLines)
+				maxLines := len(phraseLines)
+				if len(msgLines) > maxLines {
+					maxLines = len(msgLines)
+				}
 				if len(fixLines) > maxLines {
 					maxLines = len(fixLines)
 				}
 
 				for line := 0; line < maxLines; line++ {
+					phrase := ""
 					msg := ""
 					fix := ""
 
+					if line < len(phraseLines) {
+						phrase = phraseLines[line]
+					}
 					if line < len(msgLines) {
 						msg = msgLines[line]
 					}
@@ -198,23 +224,26 @@ func printResults(results []validator.Result, detailed bool) {
 					}
 
 					if line == 0 {
-						fmt.Printf("  %-*d   %-*s   %-*d   %-*s   %-*s   %-*s\n",
+						fmt.Printf("  %-*d   %-*s   %-*d   %-*s   %-*s   %-*s   %-*s\n",
 							numW, i+1,
 							severityW, iss.Severity,
 							lineW, iss.LineNumber,
 							colW, col,
+							phraseW, phrase,
 							msgW, msg,
 							fixW, fix)
 					} else {
-						fmt.Printf("  %-*s   %-*s   %-*s   %-*s   %-*s   %-*s\n",
+						fmt.Printf("  %-*s   %-*s   %-*s   %-*s   %-*s   %-*s   %-*s\n",
 							numW, "",
 							severityW, "",
 							lineW, "",
 							colW, "",
+							phraseW, phrase,
 							msgW, msg,
 							fixW, fix)
 					}
 				}
+				fmt.Println()
 			}
 
 			fmt.Println()
