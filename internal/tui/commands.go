@@ -5,6 +5,7 @@ import (
 
 	"github.com/mudittt/validatasaurus/internal/config"
 	"github.com/mudittt/validatasaurus/internal/detect"
+	"github.com/mudittt/validatasaurus/internal/filecache"
 	"github.com/mudittt/validatasaurus/internal/platform"
 	"github.com/mudittt/validatasaurus/internal/validator"
 )
@@ -61,7 +62,7 @@ func checkAuthCmd(cfg *config.Config, kind detect.Kind) tea.Cmd {
 
 func fetchFilesCmd(client platform.Platform, ticketURL string) tea.Cmd {
 	return func() tea.Msg {
-		files, err := client.FetchSQLFiles(ticketURL)
+		files, err := filecache.FetchWithCache(ticketURL, client.FetchSQLFiles)
 		if err != nil {
 			return msgErr{err}
 		}

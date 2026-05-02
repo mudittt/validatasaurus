@@ -9,6 +9,7 @@ import (
 
 	"github.com/mudittt/validatasaurus/internal/config"
 	"github.com/mudittt/validatasaurus/internal/detect"
+	"github.com/mudittt/validatasaurus/internal/filecache"
 	"github.com/mudittt/validatasaurus/internal/platform"
 	"github.com/mudittt/validatasaurus/internal/tui"
 	"github.com/mudittt/validatasaurus/internal/validator"
@@ -108,7 +109,7 @@ func runDryRun(cfg *config.Config, ticketURL string, detailed bool) {
 		os.Exit(1)
 	}
 
-	files, err := client.FetchSQLFiles(ticketURL)
+	files, err := filecache.FetchWithCache(ticketURL, client.FetchSQLFiles)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fetch: %v\n", err)
 		os.Exit(1)
