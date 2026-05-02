@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	wordwrap "github.com/mitchellh/go-wordwrap"
 
 	"github.com/mudittt/validatasaurus/internal/config"
 	"github.com/mudittt/validatasaurus/internal/detect"
@@ -13,6 +14,15 @@ import (
 	"github.com/mudittt/validatasaurus/internal/platform"
 	"github.com/mudittt/validatasaurus/internal/tui"
 	"github.com/mudittt/validatasaurus/internal/validator"
+)
+
+const (
+	numW      = 2
+	severityW = 8
+	lineW     = 4
+	colW      = 4
+	msgW      = 42
+	fixW      = 42
 )
 
 func main() {
@@ -130,15 +140,84 @@ func runDryRun(cfg *config.Config, ticketURL string, detailed bool) {
 	fmt.Println(validator.FormatComment(client.Name(), results))
 }
 
+func wrapText(s string, width uint) []string {
+	wrapped := wordwrap.WrapString(s, width)
+	return strings.Split(wrapped, "\n")
+}
+
 func printResults(results []validator.Result, detailed bool) {
 	for _, r := range results {
 		fmt.Printf("\n=== %s ===\n", r.FileName)
 		fmt.Printf("Status:     %s\n", r.Status)
 		fmt.Printf("Statements: %d  Errors: %d  Warnings: %d  Infos: %d\n",
 			r.Statements, r.ErrorCount, r.WarnCount, r.InfoCount)
-		if detailed {
+
+		if detailed && len(r.Issues) > 0 {
 			fmt.Println()
-			fmt.Println(strings.TrimSpace(r.RawOutput))
+			fmt.Printf("  %-*s   %-*s   %-*s   %-*s   %-*s   %-*s\n",
+				numW, "#",
+				severityW, "Severity",
+				lineW, "Line",
+				colW, "Col",
+				msgW, "Message",
+				fixW, "Fix",
+			)
+
+			fmt.Printf("  %-*s   %-*s   %-*s   %-*s   %-*s   %-*s\n",
+				numW, "--",
+				severityW, "--------",
+				lineW, "----",
+				colW, "----",
+				msgW, strings.Repeat("-", msgW),
+				fixW, strings.Repeat("-", fixW),
+			)
+
+			for i, iss := range r.Issues {
+				col := "-"
+				if iss.Column > 0 {
+					col = fmt.Sprintf("%d", iss.Column)
+				}
+
+				msgLines := wrapText(iss.Message, msgW)
+				fixLines := wrapText(iss.Suggestion, fixW)
+
+				maxLines := len(msgLines)
+				if len(fixLines) > maxLines {
+					maxLines = len(fixLines)
+				}
+
+				for line := 0; line < maxLines; line++ {
+					msg := ""
+					fix := ""
+
+					if line < len(msgLines) {
+						msg = msgLines[line]
+					}
+					if line < len(fixLines) {
+						fix = fixLines[line]
+					}
+
+					if line == 0 {
+						fmt.Printf("  %-*d   %-*s   %-*d   %-*s   %-*s   %-*s\n",
+							numW, i+1,
+							severityW, iss.Severity,
+							lineW, iss.LineNumber,
+							colW, col,
+							msgW, msg,
+							fixW, fix)
+					} else {
+						fmt.Printf("  %-*s   %-*s   %-*s   %-*s   %-*s   %-*s\n",
+							numW, "",
+							severityW, "",
+							lineW, "",
+							colW, "",
+							msgW, msg,
+							fixW, fix)
+					}
+				}
+			}
+
+			fmt.Println()
 		}
 	}
 }
