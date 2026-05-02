@@ -890,7 +890,25 @@ def print_report(report: Report):
 # Main entry point
 # ──────────────────────────────────────────────────────────────────────
 
-def check_sql_file(file_path: str) -> Report:
+def report_to_dict(report: Report) -> dict:
+    return {
+        "file_path": report.file_path,
+        "total_statements": report.total_statements,
+        "issues": [
+            {
+                "severity": i.severity.value,
+                "line_number": i.line_number,
+                "column": i.column,
+                "phrase": i.phrase,
+                "message": i.message,
+                "suggestion": i.suggestion,
+            }
+            for i in report.issues
+        ],
+    }
+
+
+def check_sql_file(file_path: str, print_output: bool = True) -> Report:
     """
     Analyse the SQL file at *file_path* and return a Report.
 
@@ -954,7 +972,8 @@ def check_sql_file(file_path: str) -> Report:
             unique.append(issue)
     report.issues = unique
 
-    print_report(report)
+    if print_output:
+        print_report(report)
     return report
 
 
@@ -963,11 +982,13 @@ def check_sql_file(file_path: str) -> Report:
 # ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python sql_checker.py <path_to_sql_file>")
-        print("       python sql_checker.py /path/to/file.sql")
+    json_mode = "--json" in sys.argv
+    args = [a for a in sys.argv[1:] if a != "--json"]
+    if len(args) < 1:
+        print("Usage: python sql_checker.py [--json] <path_to_sql_file>")
         sys.exit(1)
 
-    path = sys.argv[1]
-    report = check_sql_file(path)
+    report = check_sql_file(args[0], print_output=not json_mode)
+    if json_mode:
+        print(json.dumps(report_to_dict(report)))
     sys.exit(1 if any(i.severity == Severity.ERROR for i in report.issues) else 0)
