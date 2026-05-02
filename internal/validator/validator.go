@@ -220,7 +220,7 @@ func formatGitHub(results []Result) string {
 	for _, r := range results {
 		fmt.Fprintf(&b, "<details><summary>📄 %s</summary>\n\n", r.FileName)
 		b.WriteString("```\n")
-		b.WriteString(strings.TrimSpace(r.RawOutput))
+		b.WriteString(detailBody(r))
 		b.WriteString("\n```\n\n</details>\n\n")
 	}
 	return b.String()
@@ -237,8 +237,17 @@ func formatJira(results []Result) string {
 	b.WriteString("\n")
 	for _, r := range results {
 		fmt.Fprintf(&b, "{panel:title=%s}\n{noformat}\n", r.FileName)
-		b.WriteString(strings.TrimSpace(r.RawOutput))
+		b.WriteString(detailBody(r))
 		b.WriteString("\n{noformat}\n{panel}\n\n")
 	}
 	return b.String()
+}
+
+func detailBody(r Result) string {
+	header := fmt.Sprintf("Statements: %d  Errors: %d  Warnings: %d  Infos: %d\nStatus: %s",
+		r.Statements, r.ErrorCount, r.WarnCount, r.InfoCount, r.Status)
+	if len(r.Issues) == 0 {
+		return header + "\n\n✅ No issues found"
+	}
+	return header + "\n\n" + strings.TrimRight(FormatIssuesTable(r.Issues), "\n")
 }

@@ -225,7 +225,11 @@ func renderResultsDetail(results []validator.Result) string {
 	for _, r := range results {
 		b.WriteString(labelStyle.Render("── " + r.FileName + " ──"))
 		b.WriteString("\n")
-		b.WriteString(mutedStyle.Render(strings.TrimSpace(r.RawOutput)))
+		if len(r.Issues) == 0 {
+			b.WriteString(mutedStyle.Render("✅ No issues"))
+		} else {
+			b.WriteString(mutedStyle.Render(strings.TrimRight(validator.FormatIssuesTable(r.Issues), "\n")))
+		}
 		b.WriteString("\n\n")
 	}
 	return b.String()

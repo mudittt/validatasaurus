@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -13,16 +12,6 @@ import (
 	"github.com/mudittt/validatasaurus/internal/platform"
 	"github.com/mudittt/validatasaurus/internal/tui"
 	"github.com/mudittt/validatasaurus/internal/validator"
-)
-
-const (
-	numW      = 2
-	severityW = 8
-	lineW     = 4
-	colW      = 4
-	phraseW   = 15
-	msgW      = 32
-	fixW      = 32
 )
 
 func main() {
@@ -140,27 +129,6 @@ func runDryRun(cfg *config.Config, ticketURL string, detailed bool) {
 	fmt.Println(validator.FormatComment(client.Name(), results))
 }
 
-func wrapText(s string, width int) []string {
-	if width <= 0 {
-		return []string{s}
-	}
-	s = strings.ReplaceAll(s, "↵", "\n")
-	var out []string
-	for _, rawLine := range strings.Split(s, "\n") {
-		line := rawLine
-		for len(line) > width {
-			splitAt := width
-			if idx := strings.LastIndex(line[:width], " "); idx > 0 {
-				splitAt = idx
-			}
-			out = append(out, strings.TrimSpace(line[:splitAt]))
-			line = strings.TrimSpace(line[splitAt:])
-		}
-		out = append(out, line)
-	}
-	return out
-}
-
 func printResults(results []validator.Result, detailed bool) {
 	for _, r := range results {
 		fmt.Printf("\n=== %s ===\n", r.FileName)
@@ -170,83 +138,7 @@ func printResults(results []validator.Result, detailed bool) {
 
 		if detailed && len(r.Issues) > 0 {
 			fmt.Println()
-			fmt.Printf("  %-*s   %-*s   %-*s   %-*s   %-*s   %-*s   %-*s\n",
-				numW, "#",
-				severityW, "Severity",
-				lineW, "Line",
-				colW, "Col",
-				phraseW, "Phrase",
-				msgW, "Message",
-				fixW, "Fix",
-			)
-
-			fmt.Printf("  %-*s   %-*s   %-*s   %-*s   %-*s   %-*s   %-*s\n",
-				numW, "--",
-				severityW, "--------",
-				lineW, "----",
-				colW, "----",
-				phraseW, strings.Repeat("-", phraseW),
-				msgW, strings.Repeat("-", msgW),
-				fixW, strings.Repeat("-", fixW),
-			)
-
-			for i, iss := range r.Issues {
-				col := "-"
-				if iss.Column > 0 {
-					col = fmt.Sprintf("%d", iss.Column)
-				}
-
-				phraseLines := wrapText(iss.Phrase, phraseW)
-				msgLines := wrapText(iss.Message, msgW)
-				fixLines := wrapText(iss.Suggestion, fixW)
-
-				maxLines := len(phraseLines)
-				if len(msgLines) > maxLines {
-					maxLines = len(msgLines)
-				}
-				if len(fixLines) > maxLines {
-					maxLines = len(fixLines)
-				}
-
-				for line := 0; line < maxLines; line++ {
-					phrase := ""
-					msg := ""
-					fix := ""
-
-					if line < len(phraseLines) {
-						phrase = phraseLines[line]
-					}
-					if line < len(msgLines) {
-						msg = msgLines[line]
-					}
-					if line < len(fixLines) {
-						fix = fixLines[line]
-					}
-
-					if line == 0 {
-						fmt.Printf("  %-*d   %-*s   %-*d   %-*s   %-*s   %-*s   %-*s\n",
-							numW, i+1,
-							severityW, iss.Severity,
-							lineW, iss.LineNumber,
-							colW, col,
-							phraseW, phrase,
-							msgW, msg,
-							fixW, fix)
-					} else {
-						fmt.Printf("  %-*s   %-*s   %-*s   %-*s   %-*s   %-*s   %-*s\n",
-							numW, "",
-							severityW, "",
-							lineW, "",
-							colW, "",
-							phraseW, phrase,
-							msgW, msg,
-							fixW, fix)
-					}
-				}
-				fmt.Println()
-			}
-
-			fmt.Println()
+			fmt.Print(validator.FormatIssuesTable(r.Issues))
 		}
 	}
 }
