@@ -209,7 +209,7 @@ func FormatFileComment(platformName string, r Result) string {
 
 func formatGitHubFile(r Result) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "## 🦕 Validatasaurus — `%s`\n\n", r.FileName)
+	fmt.Fprintf(&b, "## `%s`\n\n", r.FileName)
 	fmt.Fprintf(&b, "%s **%s** · %d statement(s) · %d error(s) · %d warning(s)\n\n",
 		statusEmoji(r), r.Status, r.Statements, r.ErrorCount, r.WarnCount)
 	b.WriteString("```\n")
@@ -220,7 +220,7 @@ func formatGitHubFile(r Result) string {
 
 func formatJiraFile(r Result) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "h2. 🦕 Validatasaurus — %s\n\n", r.FileName)
+	fmt.Fprintf(&b, "h2. %s\n\n", r.FileName)
 	fmt.Fprintf(&b, "%s *%s* — %d statement(s), %d error(s), %d warning(s)\n\n",
 		statusEmoji(r), r.Status, r.Statements, r.ErrorCount, r.WarnCount)
 	b.WriteString("{noformat}\n")
