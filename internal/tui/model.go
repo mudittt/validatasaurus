@@ -52,6 +52,7 @@ type Model struct {
 	results     []validator.Result
 	commentBody string
 	posted      bool
+	detailed    bool
 }
 
 func NewModel(cfg *config.Config) Model {
@@ -83,6 +84,11 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) WithInitialURL(url string) Model {
 	m.urlInput.SetValue(url)
+	return m
+}
+
+func (m Model) WithDetailed(detailed bool) Model {
+	m.detailed = detailed
 	return m
 }
 

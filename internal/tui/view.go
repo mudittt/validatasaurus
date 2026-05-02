@@ -112,8 +112,12 @@ func (m Model) viewResults() string {
 	b.WriteString("\n\n")
 	b.WriteString(renderResultsTable(m.results))
 	b.WriteString("\n")
+	if m.detailed {
+		b.WriteString(renderResultsDetail(m.results))
+		b.WriteString("\n")
+	}
 	b.WriteString(labelStyle.Render("Post this report as a comment? "))
-	b.WriteString(helpStyle.Render("[y] yes  [n] no  [q] quit"))
+	b.WriteString(helpStyle.Render("[y] yes  [n] no  [d] " + detailToggleLabel(m.detailed) + "  [q] quit"))
 	b.WriteString("\n")
 	return b.String()
 }
@@ -132,7 +136,11 @@ func (m Model) viewDone() string {
 	b.WriteString("\n\n")
 	b.WriteString(renderResultsTable(m.results))
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("[Enter] or [q] to exit"))
+	if m.detailed {
+		b.WriteString(renderResultsDetail(m.results))
+		b.WriteString("\n")
+	}
+	b.WriteString(helpStyle.Render("[d] " + detailToggleLabel(m.detailed) + "  [Enter] or [q] to exit"))
 	b.WriteString("\n")
 	return b.String()
 }
@@ -210,4 +218,22 @@ func truncFile(s string, n int) string {
 		return s
 	}
 	return s[:n-1] + "…"
+}
+
+func renderResultsDetail(results []validator.Result) string {
+	var b strings.Builder
+	for _, r := range results {
+		b.WriteString(labelStyle.Render("── " + r.FileName + " ──"))
+		b.WriteString("\n")
+		b.WriteString(mutedStyle.Render(strings.TrimSpace(r.RawOutput)))
+		b.WriteString("\n\n")
+	}
+	return b.String()
+}
+
+func detailToggleLabel(detailed bool) string {
+	if detailed {
+		return "hide details"
+	}
+	return "show details"
 }

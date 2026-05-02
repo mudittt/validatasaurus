@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -16,35 +17,37 @@ import (
 func main() {
 	cfg := config.Load()
 
-	if len(os.Args) >= 2 {
-		switch os.Args[1] {
+	args, detailed := extractDetailedFlag(os.Args[1:])
+
+	if len(args) >= 1 {
+		switch args[0] {
 		case "--validate-local":
-			if len(os.Args) < 3 {
+			if len(args) < 2 {
 				fmt.Fprintln(os.Stderr, "error: --validate-local requires a file path")
 				os.Exit(2)
 			}
-			runLocalValidate(cfg, os.Args[2])
+			runLocalValidate(cfg, args[1], detailed)
 			return
 		case "--detect":
-			if len(os.Args) < 3 {
+			if len(args) < 2 {
 				fmt.Fprintln(os.Stderr, "error: --detect requires a url")
 				os.Exit(2)
 			}
-			runDetect(os.Args[2])
+			runDetect(args[1])
 			return
 		case "--dry-run":
-			if len(os.Args) < 3 {
+			if len(args) < 2 {
 				fmt.Fprintln(os.Stderr, "error: --dry-run requires a url")
 				os.Exit(2)
 			}
-			runDryRun(cfg, os.Args[2])
+			runDryRun(cfg, args[1], detailed)
 			return
 		}
 	}
 
-	model := tui.NewModel(cfg)
-	if len(os.Args) >= 2 && !startsWithDash(os.Args[1]) {
-		model = model.WithInitialURL(os.Args[1])
+	model := tui.NewModel(cfg).WithDetailed(detailed)
+	if len(args) >= 1 && !startsWithDash(args[0]) {
+		model = model.WithInitialURL(args[0])
 	}
 
 	p := tea.NewProgram(model, tea.WithAltScreen())
@@ -52,6 +55,19 @@ func main() {
 		fmt.Fprintf(os.Stderr, "tui error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func extractDetailedFlag(args []string) ([]string, bool) {
+	detailed := false
+	out := make([]string, 0, len(args))
+	for _, a := range args {
+		if a == "--detailed" {
+			detailed = true
+			continue
+		}
+		out = append(out, a)
+	}
+	return out, detailed
 }
 
 func startsWithDash(s string) bool {
@@ -67,7 +83,7 @@ func runDetect(ticketURL string) {
 	fmt.Printf("Detected: %s\n", kind)
 }
 
-func runLocalValidate(cfg *config.Config, path string) {
+func runLocalValidate(cfg *config.Config, path string, detailed bool) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "read file: %v\n", err)
@@ -75,10 +91,10 @@ func runLocalValidate(cfg *config.Config, path string) {
 	}
 	files := []platform.SQLFile{{Name: path, Content: data}}
 	results := validator.ValidateAll(cfg.PythonPath, files)
-	printResults(results)
+	printResults(results, detailed)
 }
 
-func runDryRun(cfg *config.Config, ticketURL string) {
+func runDryRun(cfg *config.Config, ticketURL string, detailed bool) {
 	kind, err := detect.DetectKind(ticketURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "detect: %v\n", err)
@@ -107,17 +123,21 @@ func runDryRun(cfg *config.Config, ticketURL string) {
 	}
 
 	results := validator.ValidateAll(cfg.PythonPath, files)
-	printResults(results)
+	printResults(results, detailed)
 
 	fmt.Printf("\n--- Comment body (%s) ---\n", client.Name())
 	fmt.Println(validator.FormatComment(client.Name(), results))
 }
 
-func printResults(results []validator.Result) {
+func printResults(results []validator.Result, detailed bool) {
 	for _, r := range results {
 		fmt.Printf("\n=== %s ===\n", r.FileName)
 		fmt.Printf("Status:     %s\n", r.Status)
 		fmt.Printf("Statements: %d  Errors: %d  Warnings: %d  Infos: %d\n",
 			r.Statements, r.ErrorCount, r.WarnCount, r.InfoCount)
+		if detailed {
+			fmt.Println()
+			fmt.Println(strings.TrimSpace(r.RawOutput))
+		}
 	}
 }

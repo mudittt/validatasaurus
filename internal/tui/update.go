@@ -167,6 +167,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "n":
 			m.state = StateDone
 			return m, nil
+		case "d":
+			m.detailed = !m.detailed
+			return m, nil
 		case "q":
 			return m, tea.Quit
 		}
@@ -177,8 +180,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case tea.KeyEnter, tea.KeyEsc:
 			return m, tea.Quit
 		}
-		if strings.ToLower(msg.String()) == "q" {
+		switch strings.ToLower(msg.String()) {
+		case "q":
 			return m, tea.Quit
+		case "d":
+			if m.state == StateDone {
+				m.detailed = !m.detailed
+			}
+			return m, nil
 		}
 		return m, nil
 
